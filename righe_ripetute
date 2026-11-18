@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+# righe_ripetute — "did the reader get stuck?"  Finds text files where the same line repeats many times in a row.
+#
+# From the Wasted Time on PC bestiary (https://wastedtimeonpc.com/bestiario): on 18 November 2026 a local vision model, asked to
+# transcribe photos of pages, got stuck twice, repeating the same line ("[?]") 508 and 469 times in a row and spending 127 and
+# 105 seconds on it; each time the next model answered on top of that broken transcription as if it were real. Saved outputs of
+# OCR, vision models and LLMs are worth checking for this, before anything else reads them.
+#
+# Usage:   righe_ripetute <folder-or-file> [--hours H] [--min N] [--ext .txt,.md]
+#          defaults: files changed in the last 26 hours, 20 identical lines in a row, extension .txt (any case)
+# Example: righe_ripetute /var/lib/myapp/transcripts --hours 24 --min 20
+# Notes:   blank lines are skipped (a stuck reader that leaves an empty line between repeats is still caught).
+#          A file named directly is checked whatever its extension, but still only if changed in the last H hours.
+# Read-only. Prints file names and counts, never the text. Exit code 0 = none, 1 = at least one stuck file, 2 = cannot check.
+import os, sys, time
+
+def uso():
+    print(open(__file__, encoding="utf-8").read().split("\nimport ")[0].replace("#!/usr/bin/env python3\n", "")); return 2
+
+def main(a):
+    if not a or a[0] in ("-h", "--help"): return uso()
+    dove, ore, minimo, est = a[0], 26.0, 20, (".txt",)
+    i = 1
+    try:
+        while i < len(a):
+            if a[i] == "--hours": ore = float(a[i + 1]); i += 2
+            elif a[i] == "--min": minimo = int(a[i + 1]); i += 2
+            elif a[i] == "--ext": est = tuple(x.strip().lower() for x in a[i + 1].split(",") if x.strip()); i += 2
+            else: print("unknown option: %s" % a[i]); return 2
+    except (IndexError, ValueError):
+        print("bad value for %s" % a[i]); return 2
+    if os.path.isfile(dove): files = [dove]
+    elif os.path.isdir(dove): files = [os.path.join(r, f) for r, _, fs in os.walk(dove) for f in fs if f.lower().endswith(est)]
+    else: print("cannot read %s" % dove); return 2
+    ora, viste, brutte, errori = time.time(), 0, 0, 0
+    for p in files:
+        try:
+            if ora - os.path.getmtime(p) > ore * 3600: continue
+            run, best, prec = 0, 0, None
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                for r in fh:
+                    k = r.strip()
+                    if not k: continue
+                    if k == prec: run += 1; best = max(best, run)
+                    else: run = 0; prec = k
+        except OSError as e:
+            errori += 1; print("? cannot read %r: %s" % (p, e.strerror)); continue
+        viste += 1
+        if best + 1 >= minimo:
+            brutte += 1; print("STUCK  %r: %d identical lines in a row" % (p, best + 1))
+    print("%d files checked (last %g hours), %d with %d+ identical lines in a row%s" % (viste, ore, brutte, minimo, ", %d unreadable" % errori if errori else ""))
+    return 1 if brutte else (2 if errori else 0)
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
