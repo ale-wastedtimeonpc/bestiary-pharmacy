@@ -14,7 +14,7 @@
 #          Works on logs with stray binary bytes. Plain files only (not .gz, not pipes).
 # Read-only. Exit code 0 = not back, 1 = back, 2 = cannot check.
 set -u -o pipefail
-[ $# -ge 2 ] || { sed -n '2,17p' "$0"; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,15p' "$0"; exit 2; }
 log=$1; vietata=$2; avvio=${3:-}
 [ -f "$log" ] && [ -r "$log" ] || { echo "cannot read $log (must be a readable plain file)"; exit 2; }
 start=1
