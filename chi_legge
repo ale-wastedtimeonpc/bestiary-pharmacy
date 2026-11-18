@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# chi_legge — "who else reads this?"  List the scripts, services, timers and cron jobs that name a file, a folder or a word.
+#
+# The vaccine of species n° 3 of the Wasted Time on PC bestiary, "The reader you didn't look at":
+# https://wastedtimeonpc.com/specie-03
+# What you write for one reader (a name, a line in a file, a file in a folder) is read by another, and the failure shows up
+# there. Before changing something shared, list its readers; keep the list; compare it after every change.
+#
+# Usage:   chi_legge <word-or-path> [more folders to search ...]
+# Example: chi_legge /var/lib/myapp/windows.conf /opt/myapp
+# Read-only. Searches config and script folders by default; add your own folders as extra arguments.
+set -u
+if [ $# -lt 1 ]; then
+  echo "usage: chi_legge <word-or-path> [more folders ...]" >&2
+  exit 2
+fi
+word="$1"; shift
+dirs=()
+for d in /etc/systemd/system /usr/lib/systemd/system /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly \
+         /etc/crontab /usr/local/bin /usr/local/sbin "${HOME:-/root}/.config/systemd/user" "$@"; do
+  [ -e "$d" ] && dirs+=("$d")
+done
+echo "Who names «$word» (in: ${dirs[*]}):"
+n=0
+while IFS= read -r f; do
+  case "$f" in *.bak*|*~|*.orig|*.swp|*.dpkg-*) continue ;; esac   # backups are not readers
+  case "$f" in */.*/*) continue ;; esac                               # files parked in hidden folders are not loaded
+  echo "  $f"
+  n=$((n + 1))
+done < <(grep -r -l -F -I --exclude-dir=.git --exclude-dir=__pycache__ --exclude-dir=node_modules -- "$word" "${dirs[@]}" 2>/dev/null | sort -u)
+if crontab -l >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q -F -- "$word"; then
+  echo "  (your user crontab)"; n=$((n + 1))
+fi
+echo "$n reader(s)."
+echo "Keep this list next to the thing you are changing. A NEW reader is the moment a specimen of species 3 is born."

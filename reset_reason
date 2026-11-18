@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# reset_reason — why did this machine restart?  Every boot, recent Linux kernels on AMD read the reset reason the chipset
+# recorded and print it ("x86/amd: Previous system reset reason [0x...]: ..."). This lists them all, wanted or not.
+#
+# From the Wasted Time on PC bestiary: on 17 November 2026 a mini-PC reset in an instant with NOTHING in the log; the only
+# witness was this line at the next boot ("data fabric sync flood"). https://wastedtimeonpc.com/bestiario
+#
+# Usage: reset_reason            (needs journalctl with a persistent journal; root or the systemd-journal group)
+# Read-only. Exit code 1 if there is at least one UNWANTED reset in the journal.
+set -u
+found=0; bad=0
+while IFS= read -r line; do
+  found=$((found + 1))
+  case "$line" in
+    *"ACPI power state transition"*|*"0xCF9"*) tag="wanted   " ;;
+    *watchdog*|*"sync flood"*|*uncorrected*|*thermal*|*temperature*|*"power fail"*) tag="UNWANTED "; bad=$((bad + 1)) ;;
+    *) tag="?        " ;;
+  esac
+  echo "[$tag] $line"
+done < <(journalctl -t kernel --no-pager -o short-iso 2>/dev/null | grep -F 'Previous system reset reason')
+if [ "$found" -eq 0 ]; then
+  echo "No 'Previous system reset reason' lines: not an AMD machine, an older kernel, or no persistent journal."
+fi
+echo "$found reset reason(s) in the journal, $bad unwanted."
+[ "$bad" -eq 0 ]
