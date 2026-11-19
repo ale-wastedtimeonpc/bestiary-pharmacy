@@ -6,20 +6,29 @@
 # witness was this line at the next boot ("data fabric sync flood"). https://wastedtimeonpc.com/bestiario
 #
 # Usage: reset_reason            (needs journalctl with a persistent journal; root or the systemd-journal group)
-# Read-only. Exit code 1 if there is at least one UNWANTED reset in the journal.
+# Read-only. Exit code 0 = every reset found is a wanted one, 1 = at least one UNWANTED reset,
+#            2 = cannot say: no reset lines at all, or reasons this script does not recognise (and none unwanted).
+#            "Nothing found" is never reported as "all fine".
 set -u
-found=0; bad=0
+found=0; bad=0; unknown=0
 while IFS= read -r line; do
   found=$((found + 1))
   case "$line" in
     *"ACPI power state transition"*|*"0xCF9"*) tag="wanted   " ;;
     *watchdog*|*"sync flood"*|*uncorrected*|*thermal*|*temperature*|*"power fail"*) tag="UNWANTED "; bad=$((bad + 1)) ;;
-    *) tag="?        " ;;
+    *) tag="?        "; unknown=$((unknown + 1)) ;;
   esac
   echo "[$tag] $line"
 done < <(journalctl -t kernel --no-pager -o short-iso 2>/dev/null | grep -F 'Previous system reset reason')
 if [ "$found" -eq 0 ]; then
-  echo "No 'Previous system reset reason' lines: not an AMD machine, an older kernel, or no persistent journal."
+  echo "No 'Previous system reset reason' lines: not an AMD machine, an older kernel, no persistent journal, or no permission."
+  echo "Nothing to judge: exit code 2 (cannot check)."
+  exit 2
 fi
-echo "$found reset reason(s) in the journal, $bad unwanted."
-[ "$bad" -eq 0 ]
+echo "$found reset reason(s) in the journal, $bad unwanted, $unknown not recognised."
+[ "$bad" -gt 0 ] && exit 1
+if [ "$unknown" -gt 0 ]; then
+  echo "Some reasons are not in this script's list: it cannot say they were wanted (exit code 2)."
+  exit 2
+fi
+exit 0
